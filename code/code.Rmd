@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r libraries}
 library(tidyverse)
 library(cluster)
+library(arulesViz)
+library(arules)
 ```
 
 ```{r readData}
@@ -20,12 +22,76 @@ books <- read.csv("data/BX-Books.csv", header = T, sep = ";")
 users <- read.csv("data/BX-Users.csv", header = T, sep = ";")
 ```
 
-```{r fakeCategories}
-set.seed(1234)
-categories = c("Action and Adventure","Classic","Detective and Mystery",
-               "Fantasy")
-books$category = sample(categories, nrow(books), replace=TRUE,
-                        prob=c(0.25, 0.3, 0.25, 0.20))
-books$category = as.factor(books$category)
+```{r cleaning__1}
+names(bookRatings) <- c("userID", "bookID", "rating")
+names(books) <- c("bookID", "title", "author", "year", "publisher", "imageS",
+                  "imageM", "imageL")
+names(users) <- c("userID", "location", "age")
 ```
+
+```{r cleaning__2}
+bookRatings <- bookRatings %>%
+  filter(Book.Rating!= 0)
+```
+
+```{r cleaning__3}
+users <- users %>%
+  mutate(userID = as.character(userID),
+         age = as.numeric(age))
+
+bookRatings <- bookRatings %>%
+  mutate(userID = as.character(userID),
+         bookID = as.character(bookID),
+         rating = as.numeric(rating))
+books <- books %>%
+  mutate(bookID = as.character(bookID),
+         title = as.factor(str_to_upper(as.character(title))),
+         author = as.factor(str_to_upper(as.character(author))),
+         publisher = as.factor(str_to_upper(as.character(publisher))),
+         year = as.numeric(year)) %>%
+  filter(!grepl("http", author)) %>%
+  filter(lengths(gregexpr("\\W+", author)) + 1 <= 4)%>%
+  filter(year >= 1800) %>%
+  drop_na()
+```
+
+```{r cleaning__4}
+z <- users %>%
+  full_join(bookRatings, by = c("userID" = "userID")) %>%
+  left_join(books, by = c("bookID" = "bookID")) %>%
+  drop_na()
+```
+
+```{r cleaning__5}
+# Creating a "basket" dataset:
+basket <- z %>%
+  group_by(userID) %>%
+  summarise(basket = as.factor(paste(title, collapse = ",")))
+
+basketIDs <- basket$userID
+basket <- basket %>% select(-userID)
+
+basket <- transactions(basket)
+```
+
+```{r itemFrequency}
+itemFrequencyPlot(basket, topN = 20, type="absolute")
+```
+
+```{r associationRules}
+rules <- apriori(basket, parameter = list(supp=0.001, conf=0.001, maxlen=2))
+inspect(rules)
+```
+
+* As we can see here the rules created by apriori algorithm are quite weak. Next we try first clustering the books and then finding association rules.
+
+# Clustering books
+
+```{r cleaning__6}
+bookIDs <- books$bookID
+booksClusterDF <- books %>%
+  select(author, year, publisher)
+```
+
+* will be completed.
 
